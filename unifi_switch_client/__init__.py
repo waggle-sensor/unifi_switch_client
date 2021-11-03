@@ -3,6 +3,7 @@
 import os
 import logging
 import json
+import time
 
 import requests
 
@@ -157,15 +158,47 @@ class UnifySwitchClient(object):
         else:
             return False, r_body['message']
 
+    def ping(self, ip_address, trial=3):
+        """ Pings to IP address
 
-if __name__ == '__main__':
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s %(message)s',
-        datefmt='%Y/%m/%d %H:%M:%S')
-    password = 'ubnt'
-    with UnifySwitchClient(host='https://localhost:8885', password=password) as client:
-        ret, table = client.get_mac_table()
-        for row in table:
-            print("hello")
-            print(row)
+        Returns:
+        --------
+        `success` -- boolean indicating whethere the request succeeded
+
+        `ping` -- result of the ping request; if `success` is False, corresponding error message is contained
+        """
+        try:
+            logging.debug(f'Start pinging to {ip_address}')
+            url = os.path.join(self.host, 'api/v1.0/tools/ping/start')
+            headers = {'Referer': os.path.join(self.host, 'tools/ping')}
+            data = json.dumps({
+                "count": trial,
+                "interval": 1,
+                "packetSize": 56,
+                "destination": ip_address
+            })
+            return_code, r_headers, r_body = self._get_response(url, data=data, additional_headers=headers)
+            if return_code == 200:
+                time.sleep(trial)
+            else:
+                raise Exception(f'Could not start ping: {return_code} - {r_body}')
+        except Exception as ex:
+            logging.debug(f'Failed to ping: {str(ex)}')
+            return False, str(ex)
+        finally:
+            url = os.path.join(self.host, 'api/v1.0/tools/ping/stop')
+            headers = {'Referer': os.path.join(self.host, 'tools/ping')}
+            data = json.dumps({})
+            return_code, r_headers, r_body = self._get_response(url, data=data, additional_headers=headers)
+            if return_code == 200:
+                url = os.path.join(self.host, 'api/v1.0/tools/ping')
+                headers = {'Referer': os.path.join(self.host, 'tools/ping')}
+                return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
+                if return_code == 200:
+                    return True, r_body
+                else:
+                    logging.debug(f'Failed to retreive ping result: {return_code} - {r_body}')
+                    return False, r_body
+            else:
+                logging.debug(f'Failed to stop pinging: {return_code} - {r_body}')
+                return False, r_body
