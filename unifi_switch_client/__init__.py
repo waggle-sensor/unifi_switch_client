@@ -7,12 +7,12 @@ import time
 
 import requests
 
-class UnifySwitchClient(object):
-    """ A SUNAPI interface for Hanwha camera
+class UnifiSwitchClient(object):
+    """ Unifi switch client
 
     Keyword Arguments:
     ----------
-    `host` -- HTTP endpoint for Hanwha camera device (e.g., http://10.0.0.3)
+    `host` -- HTTPS endpoint for Unifi switch device (e.g., https://10.0.0.3)
 
     `username` -- username used for opening a session
 
@@ -22,7 +22,7 @@ class UnifySwitchClient(object):
     ---------
     This can be used with Python context manager
     ```python
-    with UnifySwitchClient(
+    with UnifiSwitchClient(
             host='http://10.0.0.3',
             username='user',
             password='password') as client:
@@ -33,7 +33,7 @@ class UnifySwitchClient(object):
     Using Class Instance:
     ---------
     ```python
-    client = UnifySwitchClient(
+    client = UnifiSwitchClient(
         host='http://10.0.0.3',
         username='user',
         password='password')
@@ -60,17 +60,23 @@ class UnifySwitchClient(object):
     def __exit__(self, exc_type, exc_value, tb):
         self.close()
 
-    def _get_response(self, url, data=None, additional_headers={}):
+    def _get_response(self, url, data=None, files=None, additional_headers={}):
         headers = self.default_headers.copy()
         headers.update(additional_headers)
+        if files != None:
+            # When sending files, do not specify Content-Type as it is filled by requests
+            headers.pop('Content-Type')
         self.session.headers = headers
         logging.debug(f'Requesting {url}')
         logging.debug(f'with headers: {self.session.headers}')
-        if data == None:
+        if data == None and files == None:
             res = self.session.get(url)
+        elif data == None:
+            res = self.session.post(url, files=files)
         else:
             res = self.session.post(url, data=data)
         logging.debug(f'Received return code: {res.status_code}')
+        logging.debug(f'Received headers: {res.headers}')
         if 'Content-type' in res.headers:
             content_type = res.headers['Content-type']
             logging.debug(f'Content-type {content_type} found')
@@ -141,7 +147,37 @@ class UnifySwitchClient(object):
             logging.debug('Session closed')
             return True, r_body
         else:
-            return False, r_body['message']
+            return False, r_body
+
+    def change_password(self, old_password, new_password, user='ubnt'):
+        """ Changes password of ubnt account
+
+        Keyword Arguments:
+        --------
+        `old_password` -- the old password
+
+        `new_password` -- new password; should be longer than 8 characters
+
+        `user` -- user account; default to ubnt
+
+        Returns:
+        --------
+        `success` -- a boolean indicating whether the request succeeded
+
+        `message` -- response of the request
+        """
+        data = json.dumps({
+            "username": user,
+            "oldPassword": old_password,
+            "newPassword": new_password
+        })
+        url = os.path.join(self.host, 'api/v1.0/user/change-password')
+        headers = {'Referer': self.host if self.host.endswith('/') else self.host + '/'}
+        return_code, r_headers, r_body = self._get_response(url, data=data, additional_headers=headers)
+        if return_code == 200:
+            return True, r_body
+        else:
+            return False, r_body
 
     def get_mac_table(self):
         """ Returns a MAC table
@@ -202,3 +238,69 @@ class UnifySwitchClient(object):
             else:
                 logging.debug(f'Failed to stop pinging: {return_code} - {r_body}')
                 return False, r_body
+
+    def reboot_system(self):
+        """ Reboots the switch
+
+        Returns:
+        --------
+        `success` -- boolean indicating whethere the request succeeded
+
+        `message` -- detailed message about the request
+        """
+        logging.debug('Rebooting the switch...')
+        url = os.path.join(self.host, 'api/v1.0/system/reboot')
+        headers = {'Referer': os.path.join(self.host, 'settings')}
+        data=json.dumps({})
+        return_code, r_headers, r_body = self._get_response(url, data=data, additional_headers=headers)
+        if return_code == 200:
+            if r_body['statusCode'] == 200:
+                return True, r_body
+            else:
+                return False, r_body['detail']
+        else:
+            return False, r_body['message']
+    
+    def upgrade_firmware(self, firmware_path):
+        """ Upgrades the switch with given firmware
+
+        Keyword Arguments:
+        --------
+        `firmware_path` -- a path to the firmware file
+
+        Returns:
+        --------
+        `success` -- a boolean indicating whether the request succeded
+        
+        """
+        logging.debug('Upgrading firmware...')
+        url = os.path.join(self.host, 'api/v1.0/system/upgrade/direct')
+        headers = { 'Referer': os.path.join(self.host, 'settings') }
+        filename = os.path.basename(firmware_path)
+        files = {'file': (filename, open(firmware_path, 'rb'), 'application/octet-stream')}
+        return_code, r_headers, r_body = self._get_response(url, files=files, additional_headers=headers)
+        if return_code != 200:
+            return False, r_body
+        if r_body['statusCode'] != 200:
+            return False, r_body['detail']
+        else:
+            logging.debug('Firmware transfer succeded')
+
+        logging.debug('Waiting until the upgrade is done...')
+        url = os.path.join(self.host, 'api/v1.0/system/upgrade')
+        headers = { 'Referer': os.path.join(self.host, 'settings') }
+        retry = 0
+        while retry < 5:
+            return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
+            if return_code == 200:
+                if 'in_progress' in r_body['status']:
+                    logging.debug(f'Upgrading in progress. Progress percentage: {r_body["progressPercent"]}')
+                if 'finished' in r_body['status']:
+                    logging.debug(f'Firmware upgrade successfully finished. You may reboot the switch.')
+                    return True, r_body
+            else:
+                logging.debug(f'Failed to retreive status of the firmware upgrade. Retry count: {retry}')
+                retry += 1
+            time.sleep(2)
+        logging.error(f'Failed to upgrade firmware: Reached retry {retry} times.')
+        return False, None

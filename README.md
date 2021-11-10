@@ -4,7 +4,7 @@ This client communicates with Unifi EdgeSwitch 8 150W to request user queries.
 # Using Context Manager:
 This can be used with Python context manager
 ```python
-with UnifySwitchClient(
+with UnifiSwitchClient(
         host='http://10.0.0.3',
         username='user',
         password='password') as client:
@@ -14,7 +14,7 @@ with UnifySwitchClient(
 
 # Using Class Instance:
 ```python
-client = UnifySwitchClient(
+client = UnifiSwitchClient(
     host='http://10.0.0.3',
     username='user',
     password='password')
