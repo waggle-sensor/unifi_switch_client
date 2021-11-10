@@ -271,7 +271,8 @@ class UnifiSwitchClient(object):
         Returns:
         --------
         `success` -- a boolean indicating whether the request succeded
-        
+
+        `message` -- detailed message about the request
         """
         logging.debug('Upgrading firmware...')
         url = os.path.join(self.host, 'api/v1.0/system/upgrade/direct')

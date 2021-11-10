@@ -1,6 +1,11 @@
 # Python Client for Unifi EdgeSwitch 8 150W
 This client communicates with Unifi EdgeSwitch 8 150W to request user queries.
 
+# Install
+```bash
+pip3 install https://github.com/waggle-sensor/unifi_switch_client/releases/download/0.0.2/unifi_switch_client-0.0.2-py3-none-any.whl
+```
+
 # Using Context Manager:
 This can be used with Python context manager
 ```python
