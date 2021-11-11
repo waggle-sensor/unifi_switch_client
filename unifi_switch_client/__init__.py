@@ -151,6 +151,24 @@ class UnifiSwitchClient(object):
         else:
             return False, r_body
 
+    def get_device_info(self):
+        """ Returns device information from Unifi switch
+
+        Returns:
+        --------
+        `success` -- a boolean indicating whether the request succeeded
+
+        `device_info` -- response of the request
+        """
+        logging.debug('Getting device information...')
+        url = os.path.join(self.host, 'api/v1.0/device')
+        headers = {'Referer': self.host if self.host.endswith('/') else self.host + '/'}
+        return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
+        if return_code == 200:
+            return True, r_body
+        else:
+            return False, r_body
+
     def change_password(self, old_password, new_password, user='ubnt'):
         """ Changes password of ubnt account
 
