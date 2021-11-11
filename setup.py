@@ -3,7 +3,7 @@ from os import getenv
 
 setup(
     name="unifi_switch_client",
-    version=getenv("RELEASE_VERSION", "0.0.0"),
+    version=getenv("RELEASE_VERSION", "0.0.2"),
     description="Unifi switch client",
     url="https://github.com/waggle-sensor/unifi_switch_client",
     install_requires=[

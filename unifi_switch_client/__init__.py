@@ -94,6 +94,8 @@ class UnifiSwitchClient(object):
             return response.content
         elif 'application/octet-stream' in content_type:
             return response.content
+        elif 'application/gzip' in content_type:
+            return response.content
         else:
             response.text
 
@@ -260,7 +262,7 @@ class UnifiSwitchClient(object):
                 return False, r_body['detail']
         else:
             return False, r_body['message']
-    
+
     def upgrade_firmware(self, firmware_path):
         """ Upgrades the switch with given firmware
 
@@ -287,7 +289,7 @@ class UnifiSwitchClient(object):
         else:
             logging.debug('Firmware transfer succeded')
 
-        logging.debug('Waiting until the upgrade is done...')
+        logging.debug('Waiting for the upgrade to be done...')
         url = os.path.join(self.host, 'api/v1.0/system/upgrade')
         headers = { 'Referer': os.path.join(self.host, 'settings') }
         retry = 0
@@ -305,3 +307,74 @@ class UnifiSwitchClient(object):
             time.sleep(2)
         logging.error(f'Failed to upgrade firmware: Reached retry {retry} times.')
         return False, None
+
+    def backup(self, backup_dir):
+        """ Backs up the system using given backup path
+
+        Keyword Arguments:
+        --------
+        `backup_dir` -- a directory where system backup file will be stored
+
+        Returns:
+        --------
+        `success` -- a boolean indicating whether the request succeded
+
+        `message` -- detailed message about the request
+        """
+        logging.debug('Backing up the switch...')
+        url = os.path.join(self.host, 'api/v1.0/system/backup')
+        headers = {'Referer': os.path.join(self.host, 'settings')}
+        return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
+        if return_code == 200:
+            if 'Content-type' in r_headers and 'application/gzip' in r_headers['Content-type']:
+                filename = f'ubnt_edgeswitch_{int(time.time())}.tar.gz'
+            else:
+                filename = f'ubnt_edgeswitch_{int(time.time())}'
+            with open(os.path.join(backup_dir, filename), 'wb') as file:
+                file.write(r_body)
+            return True, None
+        else:
+            return False, r_body
+
+    def restore(self, backup_file):
+        """ Restores the system with given backup file
+
+            Keyword Arguments:
+            --------
+            `backup_file` -- a gz file of system configuration
+
+            Returns:
+            --------
+            `success` -- a boolean indicating whether the request succeded
+
+            `message` -- detailed message about the request
+        """
+        logging.debug(f'Restoring the switch using {backup_file}...')
+        url = os.path.join(self.host, 'api/v1.0/system/backup/restore/direct')
+        headers = { 'Referer': os.path.join(self.host, 'settings') }
+        filename = os.path.basename(backup_file)
+        files = {'file': (filename, open(backup_file, 'rb'), 'application/x-gzip')}
+        return_code, r_headers, r_body = self._get_response(url, files=files, additional_headers=headers)
+        if return_code != 200:
+            return False, r_body
+        if r_body['statusCode'] != 200:
+            return False, r_body['detail']
+        else:
+            logging.debug(f'{backup_file} transfer succeded')
+        logging.debug('Waiting for the restore to be done...')
+        url = os.path.join(self.host, 'api/v1.0/system/backup/restore')
+        headers = { 'Referer': os.path.join(self.host, 'settings') }
+        retry = 0
+        while retry < 5:
+            return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
+            if return_code == 200:
+                if 'in_progress' in r_body['status']:
+                    logging.debug('Restoring in progress...')
+                if 'finished' in r_body['status']:
+                    logging.debug(f'Restore is complete')
+                    return True, r_body
+            else:
+                logging.debug(f'Failed to retreive status of the restore. Retry count: {retry}')
+                retry += 1
+            time.sleep(2)
+        logging.error(f'Failed to restore configuration: Reached retry {retry} times.')
