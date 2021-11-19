@@ -136,7 +136,7 @@ class UnifiSwitchClient(object):
         if ret:
             self.default_headers.update({"x-auth-token": token})
         else:
-            raise Exception(f"Failed to connect to {self.host}: {token}")
+            raise Exception(f"Failed to connect to {self.host}", token)
         logging.debug("Session open")
 
     def close(self):
