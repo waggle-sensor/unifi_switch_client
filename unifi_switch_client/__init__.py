@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 
-import os
-import logging
 import json
+import logging
+import os
 import time
 
 import requests
 
+
 class UnifiSwitchClient(object):
-    """ Unifi switch client
+    """Unifi switch client
 
     Keyword Arguments:
     ----------
@@ -42,21 +43,22 @@ class UnifiSwitchClient(object):
     client.close()
     ```
     """
-    def __init__(self, host='https://10.31.81.2', username='ubnt', password='password'):
+
+    def __init__(self, host="https://10.31.81.2", username="ubnt", password="password"):
         self.host = host
         self.username = username
         self.password = password
 
         self.default_headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Connection': 'keep-alive',
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Connection": "keep-alive",
         }
 
     def __enter__(self):
         self.open()
         return self
-    
+
     def __exit__(self, exc_type, exc_value, tb):
         self.close()
 
@@ -65,42 +67,42 @@ class UnifiSwitchClient(object):
         headers.update(additional_headers)
         if files != None:
             # When sending files, do not specify Content-Type as it is filled by requests
-            headers.pop('Content-Type')
+            headers.pop("Content-Type")
         self.session.headers = headers
-        logging.debug(f'Requesting {url}')
-        logging.debug(f'with headers: {self.session.headers}')
+        logging.debug(f"Requesting {url}")
+        logging.debug(f"with headers: {self.session.headers}")
         if data == None and files == None:
             res = self.session.get(url)
         elif data == None:
             res = self.session.post(url, files=files)
         else:
             res = self.session.post(url, data=data)
-        logging.debug(f'Received return code: {res.status_code}')
-        logging.debug(f'Received headers: {res.headers}')
-        if 'Content-type' in res.headers:
-            content_type = res.headers['Content-type']
-            logging.debug(f'Content-type {content_type} found')
+        logging.debug(f"Received return code: {res.status_code}")
+        logging.debug(f"Received headers: {res.headers}")
+        if "Content-type" in res.headers:
+            content_type = res.headers["Content-type"]
+            logging.debug(f"Content-type {content_type} found")
             body = self._convert_body(content_type, res)
         else:
             body = res.text
         if res.status_code != 200:
-            logging.error(f'{body}')
+            logging.error(f"{body}")
         return res.status_code, res.headers, body
 
     def _convert_body(self, content_type, response):
-        if 'application/json' in content_type:
+        if "application/json" in content_type:
             return response.json()
-        elif 'image/jpeg' in content_type:
+        elif "image/jpeg" in content_type:
             return response.content
-        elif 'application/octet-stream' in content_type:
+        elif "application/octet-stream" in content_type:
             return response.content
-        elif 'application/gzip' in content_type:
+        elif "application/gzip" in content_type:
             return response.content
         else:
             response.text
 
     def get_token(self, username, password):
-        """ Returns a token for authentication
+        """Returns a token for authentication
 
         Keyword Arguments:
         --------
@@ -112,47 +114,47 @@ class UnifiSwitchClient(object):
         --------
         `token` -- token used for querying APIs
         """
-        url = os.path.join(self.host, 'api/v1.0/user/login')
-        headers = {'Referer': self.host if self.host.endswith('/') else self.host + '/'}
-        data = json.dumps({'username': username, 'password': password})
+        url = os.path.join(self.host, "api/v1.0/user/login")
+        headers = {"Referer": self.host if self.host.endswith("/") else self.host + "/"}
+        data = json.dumps({"username": username, "password": password})
         r_code, r_header, r_body = self._get_response(url, data=data, additional_headers=headers)
         if r_code == 200:
-            if r_body['error'] == 0:
+            if r_body["error"] == 0:
                 logging.debug(f'token received: {r_header["x-auth-token"]}')
-                return True, r_header['x-auth-token']
+                return True, r_header["x-auth-token"]
             else:
-                return False, r_body['message']
+                return False, r_body["message"]
         else:
             return False, r_code
 
     def open(self):
-        """ Opens a HTTPS session
-        """
+        """Opens a HTTPS session"""
         self.session = requests.Session()
         # Disabling SSL verification
         self.session.verify = False
         ret, token = self.get_token(self.username, self.password)
         if ret:
-            self.default_headers.update({'x-auth-token': token})
+            self.default_headers.update({"x-auth-token": token})
         else:
-            return Exception(f'Failed to connect to {self.host}: {token}')
-        logging.debug('Session open')
+            return Exception(f"Failed to connect to {self.host}: {token}")
+        logging.debug("Session open")
 
     def close(self):
-        """ Closes the HTTPS session
-        """
-        url = os.path.join(self.host, 'api/v1.0/user/logout')
-        headers = {'Referer': os.path.join(self.host, 'logout')}
-        data=json.dumps({})
-        return_code, r_headers, r_body = self._get_response(url, data=data, additional_headers=headers)
+        """Closes the HTTPS session"""
+        url = os.path.join(self.host, "api/v1.0/user/logout")
+        headers = {"Referer": os.path.join(self.host, "logout")}
+        data = json.dumps({})
+        return_code, r_headers, r_body = self._get_response(
+            url, data=data, additional_headers=headers
+        )
         if return_code == 200:
-            logging.debug('Session closed')
+            logging.debug("Session closed")
             return True, r_body
         else:
             return False, r_body
 
     def get_device_info(self):
-        """ Returns device information from Unifi switch
+        """Returns device information from Unifi switch
 
         Returns:
         --------
@@ -160,17 +162,17 @@ class UnifiSwitchClient(object):
 
         `device_info` -- response of the request
         """
-        logging.debug('Getting device information...')
-        url = os.path.join(self.host, 'api/v1.0/device')
-        headers = {'Referer': self.host if self.host.endswith('/') else self.host + '/'}
+        logging.debug("Getting device information...")
+        url = os.path.join(self.host, "api/v1.0/device")
+        headers = {"Referer": self.host if self.host.endswith("/") else self.host + "/"}
         return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
         if return_code == 200:
             return True, r_body
         else:
             return False, r_body
 
-    def change_password(self, old_password, new_password, user='ubnt'):
-        """ Changes password of ubnt account
+    def change_password(self, old_password, new_password, user="ubnt"):
+        """Changes password of ubnt account
 
         Keyword Arguments:
         --------
@@ -186,36 +188,36 @@ class UnifiSwitchClient(object):
 
         `message` -- response of the request
         """
-        data = json.dumps({
-            "username": user,
-            "oldPassword": old_password,
-            "newPassword": new_password
-        })
-        url = os.path.join(self.host, 'api/v1.0/user/change-password')
-        headers = {'Referer': self.host if self.host.endswith('/') else self.host + '/'}
-        return_code, r_headers, r_body = self._get_response(url, data=data, additional_headers=headers)
+        data = json.dumps(
+            {"username": user, "oldPassword": old_password, "newPassword": new_password}
+        )
+        url = os.path.join(self.host, "api/v1.0/user/change-password")
+        headers = {"Referer": self.host if self.host.endswith("/") else self.host + "/"}
+        return_code, r_headers, r_body = self._get_response(
+            url, data=data, additional_headers=headers
+        )
         if return_code == 200:
             return True, r_body
         else:
             return False, r_body
 
     def get_mac_table(self):
-        """ Returns a MAC table
+        """Returns a MAC table
 
         Returns:
         --------
         `table` -- A JSON of MAC table
         """
-        url = os.path.join(self.host, 'api/v1.0/tools/mac-table')
-        headers = {'Referer': os.path.join(self.host, 'tools/mac-table')}
+        url = os.path.join(self.host, "api/v1.0/tools/mac-table")
+        headers = {"Referer": os.path.join(self.host, "tools/mac-table")}
         return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
         if return_code == 200:
             return True, r_body
         else:
-            return False, r_body['message']
+            return False, r_body["message"]
 
     def ping(self, ip_address, trial=3):
-        """ Pings to IP address
+        """Pings to IP address
 
         Returns:
         --------
@@ -224,43 +226,44 @@ class UnifiSwitchClient(object):
         `ping` -- result of the ping request; if `success` is False, corresponding error message is contained
         """
         try:
-            logging.debug(f'Start pinging to {ip_address}')
-            url = os.path.join(self.host, 'api/v1.0/tools/ping/start')
-            headers = {'Referer': os.path.join(self.host, 'tools/ping')}
-            data = json.dumps({
-                "count": trial,
-                "interval": 1,
-                "packetSize": 56,
-                "destination": ip_address
-            })
-            return_code, r_headers, r_body = self._get_response(url, data=data, additional_headers=headers)
+            logging.debug(f"Start pinging to {ip_address}")
+            url = os.path.join(self.host, "api/v1.0/tools/ping/start")
+            headers = {"Referer": os.path.join(self.host, "tools/ping")}
+            data = json.dumps(
+                {"count": trial, "interval": 1, "packetSize": 56, "destination": ip_address}
+            )
+            return_code, r_headers, r_body = self._get_response(
+                url, data=data, additional_headers=headers
+            )
             if return_code == 200:
                 time.sleep(trial)
             else:
-                raise Exception(f'Could not start ping: {return_code} - {r_body}')
+                raise Exception(f"Could not start ping: {return_code} - {r_body}")
         except Exception as ex:
-            logging.debug(f'Failed to ping: {str(ex)}')
+            logging.debug(f"Failed to ping: {str(ex)}")
             return False, str(ex)
         finally:
-            url = os.path.join(self.host, 'api/v1.0/tools/ping/stop')
-            headers = {'Referer': os.path.join(self.host, 'tools/ping')}
+            url = os.path.join(self.host, "api/v1.0/tools/ping/stop")
+            headers = {"Referer": os.path.join(self.host, "tools/ping")}
             data = json.dumps({})
-            return_code, r_headers, r_body = self._get_response(url, data=data, additional_headers=headers)
+            return_code, r_headers, r_body = self._get_response(
+                url, data=data, additional_headers=headers
+            )
             if return_code == 200:
-                url = os.path.join(self.host, 'api/v1.0/tools/ping')
-                headers = {'Referer': os.path.join(self.host, 'tools/ping')}
+                url = os.path.join(self.host, "api/v1.0/tools/ping")
+                headers = {"Referer": os.path.join(self.host, "tools/ping")}
                 return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
                 if return_code == 200:
                     return True, r_body
                 else:
-                    logging.debug(f'Failed to retreive ping result: {return_code} - {r_body}')
+                    logging.debug(f"Failed to retreive ping result: {return_code} - {r_body}")
                     return False, r_body
             else:
-                logging.debug(f'Failed to stop pinging: {return_code} - {r_body}')
+                logging.debug(f"Failed to stop pinging: {return_code} - {r_body}")
                 return False, r_body
 
     def reboot_system(self):
-        """ Reboots the switch
+        """Reboots the switch
 
         Returns:
         --------
@@ -268,21 +271,23 @@ class UnifiSwitchClient(object):
 
         `message` -- detailed message about the request
         """
-        logging.debug('Rebooting the switch...')
-        url = os.path.join(self.host, 'api/v1.0/system/reboot')
-        headers = {'Referer': os.path.join(self.host, 'settings')}
-        data=json.dumps({})
-        return_code, r_headers, r_body = self._get_response(url, data=data, additional_headers=headers)
+        logging.debug("Rebooting the switch...")
+        url = os.path.join(self.host, "api/v1.0/system/reboot")
+        headers = {"Referer": os.path.join(self.host, "settings")}
+        data = json.dumps({})
+        return_code, r_headers, r_body = self._get_response(
+            url, data=data, additional_headers=headers
+        )
         if return_code == 200:
-            if r_body['statusCode'] == 200:
+            if r_body["statusCode"] == 200:
                 return True, r_body
             else:
-                return False, r_body['detail']
+                return False, r_body["detail"]
         else:
-            return False, r_body['message']
+            return False, r_body["message"]
 
     def upgrade_firmware(self, firmware_path):
-        """ Upgrades the switch with given firmware
+        """Upgrades the switch with given firmware
 
         Keyword Arguments:
         --------
@@ -294,40 +299,48 @@ class UnifiSwitchClient(object):
 
         `message` -- detailed message about the request
         """
-        logging.debug('Upgrading firmware...')
-        url = os.path.join(self.host, 'api/v1.0/system/upgrade/direct')
-        headers = { 'Referer': os.path.join(self.host, 'settings') }
+        logging.debug("Upgrading firmware...")
+        url = os.path.join(self.host, "api/v1.0/system/upgrade/direct")
+        headers = {"Referer": os.path.join(self.host, "settings")}
         filename = os.path.basename(firmware_path)
-        files = {'file': (filename, open(firmware_path, 'rb'), 'application/octet-stream')}
-        return_code, r_headers, r_body = self._get_response(url, files=files, additional_headers=headers)
+        files = {"file": (filename, open(firmware_path, "rb"), "application/octet-stream")}
+        return_code, r_headers, r_body = self._get_response(
+            url, files=files, additional_headers=headers
+        )
         if return_code != 200:
             return False, r_body
-        if r_body['statusCode'] != 200:
-            return False, r_body['detail']
+        if r_body["statusCode"] != 200:
+            return False, r_body["detail"]
         else:
-            logging.debug('Firmware transfer succeded')
+            logging.debug("Firmware transfer succeded")
 
-        logging.debug('Waiting for the upgrade to be done...')
-        url = os.path.join(self.host, 'api/v1.0/system/upgrade')
-        headers = { 'Referer': os.path.join(self.host, 'settings') }
+        logging.debug("Waiting for the upgrade to be done...")
+        url = os.path.join(self.host, "api/v1.0/system/upgrade")
+        headers = {"Referer": os.path.join(self.host, "settings")}
         retry = 0
         while retry < 5:
             return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
             if return_code == 200:
-                if 'in_progress' in r_body['status']:
-                    logging.debug(f'Upgrading in progress. Progress percentage: {r_body["progressPercent"]}')
-                if 'finished' in r_body['status']:
-                    logging.debug(f'Firmware upgrade successfully finished. You may reboot the switch.')
+                if "in_progress" in r_body["status"]:
+                    logging.debug(
+                        f'Upgrading in progress. Progress percentage: {r_body["progressPercent"]}'
+                    )
+                if "finished" in r_body["status"]:
+                    logging.debug(
+                        f"Firmware upgrade successfully finished. You may reboot the switch."
+                    )
                     return True, r_body
             else:
-                logging.debug(f'Failed to retreive status of the firmware upgrade. Retry count: {retry}')
+                logging.debug(
+                    f"Failed to retreive status of the firmware upgrade. Retry count: {retry}"
+                )
                 retry += 1
             time.sleep(2)
-        logging.error(f'Failed to upgrade firmware: Reached retry {retry} times.')
+        logging.error(f"Failed to upgrade firmware: Reached retry {retry} times.")
         return False, None
 
     def backup(self, backup_dir):
-        """ Backs up the system using given backup path
+        """Backs up the system using given backup path
 
         Keyword Arguments:
         --------
@@ -339,60 +352,62 @@ class UnifiSwitchClient(object):
 
         `message` -- detailed message about the request
         """
-        logging.debug('Backing up the switch...')
-        url = os.path.join(self.host, 'api/v1.0/system/backup')
-        headers = {'Referer': os.path.join(self.host, 'settings')}
+        logging.debug("Backing up the switch...")
+        url = os.path.join(self.host, "api/v1.0/system/backup")
+        headers = {"Referer": os.path.join(self.host, "settings")}
         return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
         if return_code == 200:
-            if 'Content-type' in r_headers and 'application/gzip' in r_headers['Content-type']:
-                filename = f'ubnt_edgeswitch_{int(time.time())}.tar.gz'
+            if "Content-type" in r_headers and "application/gzip" in r_headers["Content-type"]:
+                filename = f"ubnt_edgeswitch_{int(time.time())}.tar.gz"
             else:
-                filename = f'ubnt_edgeswitch_{int(time.time())}'
-            with open(os.path.join(backup_dir, filename), 'wb') as file:
+                filename = f"ubnt_edgeswitch_{int(time.time())}"
+            with open(os.path.join(backup_dir, filename), "wb") as file:
                 file.write(r_body)
             return True, None
         else:
             return False, r_body
 
     def restore(self, backup_file):
-        """ Restores the system with given backup file
+        """Restores the system with given backup file
 
-            Keyword Arguments:
-            --------
-            `backup_file` -- a gz file of system configuration
+        Keyword Arguments:
+        --------
+        `backup_file` -- a gz file of system configuration
 
-            Returns:
-            --------
-            `success` -- a boolean indicating whether the request succeded
+        Returns:
+        --------
+        `success` -- a boolean indicating whether the request succeded
 
-            `message` -- detailed message about the request
+        `message` -- detailed message about the request
         """
-        logging.debug(f'Restoring the switch using {backup_file}...')
-        url = os.path.join(self.host, 'api/v1.0/system/backup/restore/direct')
-        headers = { 'Referer': os.path.join(self.host, 'settings') }
+        logging.debug(f"Restoring the switch using {backup_file}...")
+        url = os.path.join(self.host, "api/v1.0/system/backup/restore/direct")
+        headers = {"Referer": os.path.join(self.host, "settings")}
         filename = os.path.basename(backup_file)
-        files = {'file': (filename, open(backup_file, 'rb'), 'application/x-gzip')}
-        return_code, r_headers, r_body = self._get_response(url, files=files, additional_headers=headers)
+        files = {"file": (filename, open(backup_file, "rb"), "application/x-gzip")}
+        return_code, r_headers, r_body = self._get_response(
+            url, files=files, additional_headers=headers
+        )
         if return_code != 200:
             return False, r_body
-        if r_body['statusCode'] != 200:
-            return False, r_body['detail']
+        if r_body["statusCode"] != 200:
+            return False, r_body["detail"]
         else:
-            logging.debug(f'{backup_file} transfer succeded')
-        logging.debug('Waiting for the restore to be done...')
-        url = os.path.join(self.host, 'api/v1.0/system/backup/restore')
-        headers = { 'Referer': os.path.join(self.host, 'settings') }
+            logging.debug(f"{backup_file} transfer succeded")
+        logging.debug("Waiting for the restore to be done...")
+        url = os.path.join(self.host, "api/v1.0/system/backup/restore")
+        headers = {"Referer": os.path.join(self.host, "settings")}
         retry = 0
         while retry < 5:
             return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
             if return_code == 200:
-                if 'in_progress' in r_body['status']:
-                    logging.debug('Restoring in progress...')
-                if 'finished' in r_body['status']:
-                    logging.debug(f'Restore is complete')
+                if "in_progress" in r_body["status"]:
+                    logging.debug("Restoring in progress...")
+                if "finished" in r_body["status"]:
+                    logging.debug(f"Restore is complete")
                     return True, r_body
             else:
-                logging.debug(f'Failed to retreive status of the restore. Retry count: {retry}')
+                logging.debug(f"Failed to retreive status of the restore. Retry count: {retry}")
                 retry += 1
             time.sleep(2)
-        logging.error(f'Failed to restore configuration: Reached retry {retry} times.')
+        logging.error(f"Failed to restore configuration: Reached retry {retry} times.")
