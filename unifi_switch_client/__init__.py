@@ -125,7 +125,7 @@ class UnifiSwitchClient(object):
             else:
                 return False, r_body["message"]
         else:
-            return False, r_code
+            return False, r_body
 
     def open(self):
         """Opens a HTTPS session"""
