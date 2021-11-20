@@ -21,6 +21,9 @@ class UnifiOpenException(Exception):
         self.message = message
         super().__init__(self.message)
 
+    def __str__(self):
+        return f"{self.message} [reason: {self.reason}]"
+
 
 class UnifiSwitchClient(object):
     """Unifi switch client
