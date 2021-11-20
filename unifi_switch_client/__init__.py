@@ -262,8 +262,8 @@ class UnifiSwitchClient(object):
                 logging.debug(f"Failed to stop pinging: {return_code} - {r_body}")
                 return False, r_body
 
-    def reboot_system(self):
-        """Reboots the switch
+    def _reboot_or_poweroff(self, mode="reboot"):
+        """Reboots or powers off the switch
 
         Returns:
         --------
@@ -271,8 +271,7 @@ class UnifiSwitchClient(object):
 
         `message` -- detailed message about the request
         """
-        logging.debug("Rebooting the switch...")
-        url = os.path.join(self.host, "api/v1.0/system/reboot")
+        url = os.path.join(self.host, f"api/v1.0/system/{mode}")
         headers = {"Referer": os.path.join(self.host, "settings")}
         data = json.dumps({})
         return_code, r_headers, r_body = self._get_response(
@@ -285,6 +284,30 @@ class UnifiSwitchClient(object):
                 return False, r_body["detail"]
         else:
             return False, r_body["message"]
+
+    def reboot_system(self):
+        """Reboots the switch
+
+        Returns:
+        --------
+        `success` -- boolean indicating whethere the request succeeded
+
+        `message` -- detailed message about the request
+        """
+        logging.debug("Rebooting the switch...")
+        return self._reboot_or_poweroff(mode="reboot")
+
+    def poweroff_system(self):
+        """Powers off the switch
+
+        Returns:
+        --------
+        `success` -- boolean indicating whethere the request succeeded
+
+        `message` -- detailed message about the request
+        """
+        logging.debug("Powering off the switch...")
+        return self._reboot_or_poweroff(mode="poweroff]")
 
     def upgrade_firmware(self, firmware_path):
         """Upgrades the switch with given firmware
