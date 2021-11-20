@@ -8,6 +8,20 @@ import time
 import requests
 
 
+class UnifiOpenException(Exception):
+    """Custom exception accepting a dictionary with the connection failure details.
+
+    Attributes:
+        reason -- dictionary with the connection failure details
+        message -- explanation of the error
+    """
+
+    def __init__(self, message, reason=None):
+        self.reason = reason
+        self.message = message
+        super().__init__(self.message)
+
+
 class UnifiSwitchClient(object):
     """Unifi switch client
 
@@ -136,7 +150,7 @@ class UnifiSwitchClient(object):
         if ret:
             self.default_headers.update({"x-auth-token": token})
         else:
-            raise Exception(f"Failed to connect to {self.host}", token)
+            raise UnifiOpenException(f"Failed to connect to {self.host}", reason=token)
         logging.debug("Session open")
 
     def close(self):
