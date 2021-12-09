@@ -3,7 +3,7 @@ This client communicates with Unifi EdgeSwitch 8 150W to request user queries.
 
 # Install
 ```bash
-pip3 install https://github.com/waggle-sensor/unifi_switch_client/releases/download/0.0.2/unifi_switch_client-0.0.2-py3-none-any.whl
+pip3 install https://github.com/waggle-sensor/unifi_switch_client/releases/download/0.0.8/unifi_switch_client-0.0.8-py3-none-any.whl
 ```
 
 # Using Context Manager:
