@@ -7,7 +7,6 @@ import time
 
 import requests
 
-
 class UnifiOpenException(Exception):
     """Custom exception accepting a dictionary with the connection failure details.
 
@@ -79,21 +78,30 @@ class UnifiSwitchClient(object):
     def __exit__(self, exc_type, exc_value, tb):
         self.close()
 
-    def _get_response(self, url, data=None, files=None, additional_headers={}):
+    def _prep_headers(self, payload={}, additional_headers={}):
         headers = self.default_headers.copy()
         headers.update(additional_headers)
-        if files != None:
+        content_type = payload.get("content_type", "")
+        if content_type == "file":
             # When sending files, do not specify Content-Type as it is filled by requests
             headers.pop("Content-Type")
         self.session.headers = headers
-        logging.debug(f"Requesting {url}")
         logging.debug(f"with headers: {self.session.headers}")
-        if data == None and files == None:
-            res = self.session.get(url)
-        elif data == None:
-            res = self.session.post(url, files=files)
-        else:
-            res = self.session.post(url, data=data)
+
+    def _get_response(self, method_func, url, payload, additional_headers={}):
+        self._prep_headers(payload, additional_headers)
+        content_type = payload.get("content_type", "")
+        _payload = payload.get("payload", "")
+        if content_type == "":
+            resp = method_func(url)
+        elif content_type == "data":
+            resp = method_func(url, data=_payload)
+        elif content_type == "file":
+            resp = method_func(url, files=_payload)
+        return resp
+
+    def _parse_response(self, res):
+        
         logging.debug(f"Received return code: {res.status_code}")
         logging.debug(f"Received headers: {res.headers}")
         if "Content-type" in res.headers:
@@ -118,6 +126,27 @@ class UnifiSwitchClient(object):
         else:
             response.text
 
+    def _generate_payload(self, content_type, payload=None):
+        return {
+            "content_type": content_type,
+            "payload": payload,
+        }
+
+    def _get(self, url, payload={}, additional_headers={}):
+        logging.debug(f"[GET] {url}")
+        resp = self._get_response(self.session.get, url, payload, additional_headers)
+        return self._parse_response(resp)
+    
+    def _post(self, url, payload={}, additional_headers={}):
+        logging.debug(f"[POST] {url}")
+        resp = self._get_response(self.session.post, url, payload, additional_headers)
+        return self._parse_response(resp)
+    
+    def _put(self, url, payload={}, additional_headers={}):
+        logging.debug(f"[PUT] {url}")
+        resp = self._get_response(self.session.put, url, payload, additional_headers)
+        return self._parse_response(resp)
+
     def get_token(self, username, password):
         """Returns a token for authentication
 
@@ -133,8 +162,8 @@ class UnifiSwitchClient(object):
         """
         url = os.path.join(self.host, "api/v1.0/user/login")
         headers = {"Referer": self.host if self.host.endswith("/") else self.host + "/"}
-        data = json.dumps({"username": username, "password": password})
-        r_code, r_header, r_body = self._get_response(url, data=data, additional_headers=headers)
+        payload = self._generate_payload("data", json.dumps({"username": username, "password": password}))
+        r_code, r_header, r_body = self._post(url, payload=payload, additional_headers=headers)
         if r_code == 200:
             if r_body["error"] == 0:
                 logging.debug(f'token received: {r_header["x-auth-token"]}')
@@ -160,9 +189,9 @@ class UnifiSwitchClient(object):
         """Closes the HTTPS session"""
         url = os.path.join(self.host, "api/v1.0/user/logout")
         headers = {"Referer": os.path.join(self.host, "logout")}
-        data = json.dumps({})
-        return_code, r_headers, r_body = self._get_response(
-            url, data=data, additional_headers=headers
+        payload = self._generate_payload("data", json.dumps({}))
+        return_code, r_headers, r_body = self._post(
+            url, payload=payload, additional_headers=headers
         )
         if return_code == 200:
             logging.debug("Session closed")
@@ -182,7 +211,7 @@ class UnifiSwitchClient(object):
         logging.debug("Getting device information...")
         url = os.path.join(self.host, "api/v1.0/device")
         headers = {"Referer": self.host if self.host.endswith("/") else self.host + "/"}
-        return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
+        return_code, r_headers, r_body = self._get(url, additional_headers=headers)
         if return_code == 200:
             return True, r_body
         else:
@@ -205,13 +234,13 @@ class UnifiSwitchClient(object):
 
         `message` -- response of the request
         """
-        data = json.dumps(
+        payload = self._generate_payload("data", json.dumps(
             {"username": user, "oldPassword": old_password, "newPassword": new_password}
-        )
+        ))
         url = os.path.join(self.host, "api/v1.0/user/change-password")
         headers = {"Referer": self.host if self.host.endswith("/") else self.host + "/"}
-        return_code, r_headers, r_body = self._get_response(
-            url, data=data, additional_headers=headers
+        return_code, r_headers, r_body = self._post(
+            url, payload=payload, additional_headers=headers
         )
         if return_code == 200:
             return True, r_body
@@ -227,7 +256,7 @@ class UnifiSwitchClient(object):
         """
         url = os.path.join(self.host, "api/v1.0/tools/mac-table")
         headers = {"Referer": os.path.join(self.host, "tools/mac-table")}
-        return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
+        return_code, r_headers, r_body = self._get(url, additional_headers=headers)
         if return_code == 200:
             return True, r_body
         else:
@@ -246,11 +275,11 @@ class UnifiSwitchClient(object):
             logging.debug(f"Start pinging to {ip_address}")
             url = os.path.join(self.host, "api/v1.0/tools/ping/start")
             headers = {"Referer": os.path.join(self.host, "tools/ping")}
-            data = json.dumps(
+            payload = self._generate_payload("data", json.dumps(
                 {"count": trial, "interval": 1, "packetSize": 56, "destination": ip_address}
-            )
-            return_code, r_headers, r_body = self._get_response(
-                url, data=data, additional_headers=headers
+            ))
+            return_code, r_headers, r_body = self._post(
+                url, payload=payload, additional_headers=headers
             )
             if return_code == 200:
                 time.sleep(trial)
@@ -262,14 +291,14 @@ class UnifiSwitchClient(object):
         finally:
             url = os.path.join(self.host, "api/v1.0/tools/ping/stop")
             headers = {"Referer": os.path.join(self.host, "tools/ping")}
-            data = json.dumps({})
-            return_code, r_headers, r_body = self._get_response(
-                url, data=data, additional_headers=headers
+            payload = self._generate_payload("data", json.dumps({}))
+            return_code, r_headers, r_body = self._post(
+                url, payload=payload, additional_headers=headers
             )
             if return_code == 200:
                 url = os.path.join(self.host, "api/v1.0/tools/ping")
                 headers = {"Referer": os.path.join(self.host, "tools/ping")}
-                return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
+                return_code, r_headers, r_body = self._get(url, additional_headers=headers)
                 if return_code == 200:
                     return True, r_body
                 else:
@@ -291,9 +320,9 @@ class UnifiSwitchClient(object):
         logging.debug("Rebooting the switch...")
         url = os.path.join(self.host, "api/v1.0/system/reboot")
         headers = {"Referer": os.path.join(self.host, "settings")}
-        data = json.dumps({})
-        return_code, r_headers, r_body = self._get_response(
-            url, data=data, additional_headers=headers
+        payload = self._generate_payload("data", json.dumps({}))
+        return_code, r_headers, r_body = self._get(
+            url, payload=payload, additional_headers=headers
         )
         if return_code == 200:
             if r_body["statusCode"] == 200:
@@ -320,9 +349,9 @@ class UnifiSwitchClient(object):
         url = os.path.join(self.host, "api/v1.0/system/upgrade/direct")
         headers = {"Referer": os.path.join(self.host, "settings")}
         filename = os.path.basename(firmware_path)
-        files = {"file": (filename, open(firmware_path, "rb"), "application/octet-stream")}
-        return_code, r_headers, r_body = self._get_response(
-            url, files=files, additional_headers=headers
+        payload = self._generate_payload("file", {"file": (filename, open(firmware_path, "rb"), "application/octet-stream")})
+        return_code, r_headers, r_body = self._post(
+            url, payload=payload, additional_headers=headers
         )
         if return_code != 200:
             return False, r_body
@@ -336,7 +365,7 @@ class UnifiSwitchClient(object):
         headers = {"Referer": os.path.join(self.host, "settings")}
         retry = 0
         while retry < 5:
-            return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
+            return_code, r_headers, r_body = self._get(url, additional_headers=headers)
             if return_code == 200:
                 if "in_progress" in r_body["status"]:
                     logging.debug(
@@ -372,7 +401,7 @@ class UnifiSwitchClient(object):
         logging.debug("Backing up the switch...")
         url = os.path.join(self.host, "api/v1.0/system/backup")
         headers = {"Referer": os.path.join(self.host, "settings")}
-        return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
+        return_code, r_headers, r_body = self._get(url, additional_headers=headers)
         if return_code == 200:
             if "Content-type" in r_headers and "application/gzip" in r_headers["Content-type"]:
                 filename = f"ubnt_edgeswitch_{int(time.time())}.tar.gz"
@@ -401,9 +430,9 @@ class UnifiSwitchClient(object):
         url = os.path.join(self.host, "api/v1.0/system/backup/restore/direct")
         headers = {"Referer": os.path.join(self.host, "settings")}
         filename = os.path.basename(backup_file)
-        files = {"file": (filename, open(backup_file, "rb"), "application/x-gzip")}
-        return_code, r_headers, r_body = self._get_response(
-            url, files=files, additional_headers=headers
+        payload = self._generate_payload("file", {"file": (filename, open(backup_file, "rb"), "application/x-gzip")})
+        return_code, r_headers, r_body = self._post(
+            url, payload=payload, additional_headers=headers
         )
         if return_code != 200:
             return False, r_body
@@ -416,7 +445,7 @@ class UnifiSwitchClient(object):
         headers = {"Referer": os.path.join(self.host, "settings")}
         retry = 0
         while retry < 5:
-            return_code, r_headers, r_body = self._get_response(url, additional_headers=headers)
+            return_code, r_headers, r_body = self._get(url, additional_headers=headers)
             if return_code == 200:
                 if "in_progress" in r_body["status"]:
                     logging.debug("Restoring in progress...")
@@ -428,3 +457,59 @@ class UnifiSwitchClient(object):
                 retry += 1
             time.sleep(2)
         logging.error(f"Failed to restore configuration: Reached retry {retry} times.")
+
+    def get_ports_profile(self):
+        """Returns port configuration
+
+        Returns:
+        --------
+        `success` -- a boolean indicating whether the request succeded
+
+        `list` -- list of dicts representing each port
+        """
+        logging.debug(f"Querying port information...")
+        url = os.path.join(self.host, "api/v1.0/interfaces")
+        return_code, r_headers, r_body = self._get(url)
+        if return_code == 200:
+            return True, r_body
+        else:
+            return False, r_body["message"]
+        
+    def set_ports_profile(self, profiles):
+        """Puts port configuration in Switch
+
+        Keyword Arguments:
+        --------
+        `profiles` -- a list of dict for each port configuration to set
+
+        Returns:
+        --------
+        `success` -- a boolean indicating whether the request succeded
+
+        `message` -- detailed message about the request
+        """
+        logging.debug(f"Pushing port configuration to switch...")
+        url = os.path.join(self.host, "api/v1.0/interfaces")
+        payload = self._generate_payload("data", json.dumps(profiles))
+        return_code, r_headers, r_body = self._put(url, payload=payload)
+        if return_code == 200:
+            return True, r_body
+        else:
+            return False, r_body["message"]
+    
+    def get_stat(self):
+        """Returns statistics for system and ports
+
+        Returns:
+        --------
+        `success` -- a boolean indicating whether the request succeded
+
+        `dict` -- dict representing statistics on the system and each port
+        """
+        logging.debug(f"Querying statistics information...")
+        url = os.path.join(self.host, "api/v1.0/statistics")
+        return_code, r_headers, r_body = self._get(url)
+        if return_code == 200:
+            return True, r_body
+        else:
+            return False, r_body["message"]

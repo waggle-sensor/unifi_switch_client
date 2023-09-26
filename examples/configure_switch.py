@@ -1,3 +1,4 @@
+import os
 import logging
 from unifi_switch_client import UnifiSwitchClient
 
@@ -8,10 +9,11 @@ def configure():
     Target firmware should be already downloaded at /tmp/ESWH.v1.9.2.5322630.stk
     """
     firmware_path = '/tmp/ESWH.v1.9.2.5322630.stk'
+    password = os.getenv("UNIFI_PASSWORD", "")
     with UnifiSwitchClient(
         host='https://localhost:8885',
         username='ubnt',
-        password='ubnt') as client:
+        password=password) as client:
         ret, err = client.change_password(old_password='ubnt', new_password='changemetosomething')
         if ret:
             logging.info('Password successfully changed')

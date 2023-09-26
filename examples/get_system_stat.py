@@ -1,22 +1,22 @@
 import os
 import logging
+import json
 from unifi_switch_client import UnifiSwitchClient
 
 
-def backup():
+def device_info():
     """ This example downloads the current configuration from a Unifi Switch
     """
-    backup_dir = f'/tmp/'
     password = os.getenv("UNIFI_PASSWORD", "")
     with UnifiSwitchClient(
         host='https://localhost:8885',
         username='ubnt',
         password=password) as client:
-        ret, err = client.backup(backup_dir)
+        ret, info = client.get_stat()
         if ret:
-            logging.info('System configuration successfully backed up')
+            logging.info(json.dumps(info, indent=4))
         else:
-            logging.error(f'Could not download system configuration: {err}')
+            logging.error(f'Could not get system information: {info}')
 
 
 if __name__ == '__main__':
@@ -25,4 +25,4 @@ if __name__ == '__main__':
         format='%(asctime)s %(message)s',
         datefmt='%Y/%m/%d %H:%M:%S')
 
-    backup()
+    device_info()

@@ -1,3 +1,4 @@
+import os
 import logging
 import json
 from unifi_switch_client import UnifiSwitchClient
@@ -6,10 +7,11 @@ from unifi_switch_client import UnifiSwitchClient
 def device_info():
     """ This example downloads the current configuration from a Unifi Switch
     """
+    password = os.getenv("UNIFI_PASSWORD", "")
     with UnifiSwitchClient(
         host='https://localhost:8885',
         username='ubnt',
-        password='changemetosomething') as client:
+        password=password) as client:
         ret, info = client.get_device_info()
         if ret:
             logging.info(json.dumps(info, indent=4))
